@@ -1,0 +1,140 @@
+// Programm für einen einfachen Taschenrechner
+// Datenaustausch über seriellen Port COM3
+// Eingabe- und Anzeige-Programm
+// Berechnungsprogramm erfolgt in C für einen Mikrocontroller
+
+#include <iostream> // ermöglicht Eingabe über Tastatur und Ausgabe über Bildschirm
+#include <string> // Funktion zur Bearbeitung von Zeichenketten
+#include <windows.h> // Funktion um mit Windows Betriebssystem zu arbeiten
+#include <thread> // ermöglicht Programm mehrere Aufgaben gleichzeitig auszuführen
+
+//Seriellen Port Konfigurieren und Baudrate einstellen
+void configureSerialPort(HANDLE hSerial)
+{
+    DCB dcbSerialParams = { 0 };
+    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+
+    if (!GetCommState(hSerial, &dcbSerialParams))
+    {
+        std::cerr << "Fehler beim Abrufen des COM-Zustands\n";
+        return;
+    }
+    dcbSerialParams.BaudRate = CBR_9600;
+    dcbSerialParams.ByteSize = 8;
+    dcbSerialParams.StopBits = ONESTOPBIT;
+    dcbSerialParams.Parity = NOPARITY;
+    dcbSerialParams.fOutxCtsFlow = TRUE; // CTS Flow Control aktivieren
+    dcbSerialParams.fRtsControl = RTS_CONTROL_HANDSHAKE; // RTS Flow Control aktivieren
+
+    if (!SetCommState(hSerial, &dcbSerialParams))
+    {
+        std::cerr << "Fehler beim Konfigurieren des COM-Ports\n";
+        return;
+    }
+
+    //Timeouts definieren um bessere Synchronisation zu erhalten
+    COMMTIMEOUTS timeouts = { 0 };
+    timeouts.ReadIntervalTimeout = 50;
+    timeouts.ReadTotalTimeoutConstant = 50;
+    timeouts.ReadTotalTimeoutMultiplier = 10;
+    timeouts.WriteTotalTimeoutConstant = 50;
+    timeouts.WriteTotalTimeoutMultiplier = 10;
+
+    if (!SetCommTimeouts(hSerial, &timeouts))
+    {
+        std::cerr << "Fehler beim Setzen der Timeouts\n";
+    }
+}
+
+// Funktion zum Datensenden
+void sendData(const std::string& data)
+{
+    HANDLE hSerial = CreateFile(L"\\\\.\\COM3", GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+
+    // Kontrolle ob Öffnen des Ports erfolgreich war
+    if (hSerial == INVALID_HANDLE_VALUE)
+    {
+        std::cerr << "Fehler beim Oeffnen des Ports\n";
+        return;
+    }
+
+    configureSerialPort(hSerial);
+
+    DWORD bytes_written;
+
+    // Kontrolle ob Schreiben auf den Port erfolgreich war
+    if (!WriteFile(hSerial, data.c_str(), data.length(), &bytes_written, NULL))
+    {
+        std::cerr << "Fehler beim Schreiben auf den Port\n";
+    }
+    else
+    {
+        std::cout << "Daten erfolgreich gesendet: " << data << std::endl;
+    }
+
+    CloseHandle(hSerial);
+}
+
+// Funktion zum Datenerhalten
+std::string receiveData()
+{
+    HANDLE hSerial = CreateFile(L"\\\\.\\COM3", GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+
+    // Kontrolle ob Öffnen des Ports erfolgreich war
+    if (hSerial == INVALID_HANDLE_VALUE)
+    {
+        std::cerr << "Fehler beim Oeffnen des Ports\n";
+        return "";
+    }
+
+    configureSerialPort(hSerial);
+
+    char buffer[256]; // Einstellen der Buffergröße
+    DWORD bytes_read;
+    std::string result;
+
+    // Schleife, um sicherzustellen, dass die kompletten Daten gelesen werden
+    while (true)
+    {
+        if (!ReadFile(hSerial, buffer, sizeof(buffer) - 1, &bytes_read, NULL))
+        {
+            std::cerr << "Fehler beim Lesen vom Port\n";
+            break;
+        }
+        if (bytes_read == 0)
+        {
+            break; // Keine weiteren Daten zu lesen
+        }
+        buffer[bytes_read] = '\0'; // String terminieren
+        result += buffer; // Wert des Buffers auf die Variable "result" übergeben
+    }
+
+    std::cout << "Daten erfolgreich empfangen\n";
+    CloseHandle(hSerial);
+    return result;
+}
+
+// Hauptprogramm zum Erfassen der Eingabe, Übermitteln und Empfangen der Daten und Ausgabe des Ergebnisses
+int main()
+{
+    // Erneuter Start des Programms, sobald eine Aufgabe abgeschlossen wurde
+    while (true)
+    {
+        std::string data;
+        std::cout << "Bitte geben Sie die Rechenaufgabe ein (Format: a+b | a-b | a*b | a/b) oder 'q' zum Beenden: "; // Aufforderung die Eingabe in den angegebenen Format einzugeben
+        std::getline(std::cin, data);
+
+        if (data == "q")
+        {
+            break;
+        }
+
+        sendData(data);
+
+        std::string result = receiveData();
+
+        std::cout << "Ergebnis der Berechnung: " << result << std::endl;
+    }
+
+    return 0;
+}
