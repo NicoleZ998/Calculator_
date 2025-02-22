@@ -1,0 +1,99 @@
+const int ledPin = 13; // LED an Pin 13 - zur Überprüfung ob Arduino Daten empfängt
+#define SERIAL_RX_BUFFER_SIZE 256
+#define SERIAL_TX_BUFFER_SIZE 256
+
+void setup()
+{
+  Serial.begin(9600); // Serielle Kommunikation mit einer Baudrate von 9600 starten
+  pinMode(ledPin, OUTPUT); // LED-Pin 13 als Ausgang festlegen
+  while (!Serial) // warten, bis die serielle Verbindung hergestellt ist
+  {
+    ;
+  }
+}
+
+void loop()
+{
+  if (Serial.available() > 0) //Daten lesen, wenn über die serielle Verbindung Daten empfangen werden
+  {
+    char buffer[256]; // Puffer für empfangene Daten
+    receiveData(buffer, sizeof(buffer)); // Funktion zum Daten empfangen
+    
+    int num1, num2;
+    char operation;
+    sscanf(buffer, "%d %c %d", &num1, &operation, &num2);  // Daten parsen
+
+    double result = calculate(num1, operation, num2); // Berechnung durchführen
+    sendData(result); // Ergebnis senden
+
+    // Puffer leeren
+    clearBuffer(buffer, sizeof(buffer));
+
+    digitalWrite(ledPin, HIGH); // LED einschalten zur Bestätigung das Daten empfangen wurden
+    delay(1000); // 1000 ms warten
+    digitalWrite(ledPin, LOW); // LED ausschalten   
+  }
+}
+
+double calculate(double num1, char operation, double num2) // Funktion zur Berechnung
+{
+  double result;
+  switch (operation)
+  {
+    case '+':
+      result = num1 + num2;
+      break;
+    case '-':
+      result = num1 - num2;
+      break;
+    case '*':
+      result = num1 * num2;
+      break;
+    case '/':
+      if (num2 != 0)
+      {
+        result = num1 / num2;
+      }
+      else
+      {
+        Serial.println("ERROR");
+        result = 0;
+      }
+      break;
+    default:  // Ausgabe bei falschen Eingaben
+      Serial.println("Ungültige Operation");
+      result = 0;
+      break;
+  }
+  return result;
+}
+
+// Funktion zum Empfangen von Daten über die serielle Schnittstelle
+void receiveData(char* buffer, size_t size)
+{
+  size_t index = 0;
+  while (Serial.available() > 0 && index < size - 1)
+  {
+    buffer[index++] = Serial.read();
+    delay(100); // Kurze Verzögerung für stabile Kommunikation
+  }
+  buffer[index] = '\0'; // String terminieren
+}
+
+// Funktion zum Leeren des Buffers
+void clearBuffer(char* buffer, size_t size)
+{
+  for (size_t index = 0; index < size; ++index)
+  {
+    buffer[index] = '\0';
+  }
+}
+
+// Funktion zum Senden von Daten über die serielle Schnittstelle
+void sendData(double result)
+{
+  Serial.print(result, 2); // Ergebnis mit 2 Dezimalstellen senden
+  Serial.println(); // Zeilenumbruch hinzufügen
+  Serial.flush(); // Sicherstellen, dass alle Daten gesendet werden
+  delay(1000); // Kurze Verzögerung hinzufügen um sicherzustellen, dass alle Daten gesendet wurden
+}
